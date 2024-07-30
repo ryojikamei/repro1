@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+service interconnect {
+    rpc ccGeneralIc (stream icGeneralPacket) returns (stream icGeneralPacket);
+}
+
+message icGeneralPacket {
+    string id = 1;
+    string message = 2;
+}
