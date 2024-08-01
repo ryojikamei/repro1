@@ -11,8 +11,8 @@ export class icServer implements ic_grpc.IinterconnectServer {
     ) {}
 }
 
-export type generalInConnections = {
-    [nodename: string]: ClientDuplexStream<ic.icGeneralPacket, ic.icGeneralPacket>
+export type generalInChannel = {
+    [nodename: string]: ic_grpc.interconnectClient
 }
 
 export type clientInstance = {
@@ -34,14 +34,14 @@ export class InBasicClass {
     private nodename: string;
     private counter_name: string;
     private server: Server;
-    private generalConnections: generalInConnections;
+    private generalChannel: generalInChannel;
     private generalResults: generalInResults;
     constructor(this_ip: string, this_port: number, that_ip: string, that_port: number) {
         this.port = this_port;
         this.nodename = this_ip + ":" + this_port.toString();
         this.counter_name = that_ip + ":" + that_port.toString();
         this.server = new Server();
-        this.generalConnections = {};
+        this.generalChannel = {};
         this.generalResults = {};
     }
 
@@ -82,18 +82,25 @@ export class InBasicClass {
         while (resolved === false) {
             console.log(this.nodename + ": pingLoop" + count.toString() + " begin");
             this.setupChannel();
-            const call = this.generalConnections[this.counter_name];
+            const call = this.generalChannel[this.counter_name].ccGeneralIc();
             packet.setId(randomUUID());
+            call.on("data", (req: ic.icGeneralPacket) => {
+                console.log(this.nodename + ": data arrived to client from " + this.counter_name + ".")
+                this.generalResults[req.getId()] = {
+                    state: "success",
+                    result: req
+                }
+            })
+            call.on("error", () => {
+                this.generalResults[packet.getId()] = {
+                    state: "failure",
+                    result: undefined
+                }
+            });
             call.write(packet, () => {
                 console.log(this.nodename + ": ping")
                 this.generalResults[packet.getId()] = {
                     state: "yet",
-                    result: undefined
-                }
-            });
-            call.on("error", () => {
-                this.generalResults[packet.getId()] = {
-                    state: "failure",
                     result: undefined
                 }
             });
@@ -120,19 +127,9 @@ export class InBasicClass {
         }
     }
     private setupChannel(): void {
-        if (this.generalConnections[this.counter_name] === undefined) {
+        if (this.generalChannel[this.counter_name] === undefined) {
             const creds: ChannelCredentials = ChannelCredentials.createInsecure();
-            const newclient = new ic_grpc.interconnectClient(this.counter_name, creds);
-            this.generalConnections[this.counter_name] = newclient.ccGeneralIc();
+            this.generalChannel[this.counter_name] = new ic_grpc.interconnectClient(this.counter_name, creds);
         }
-        const call = this.generalConnections[this.counter_name];
-        call.on("data", (req: ic.icGeneralPacket) => {
-            console.log(this.nodename + ": data arrived to client from " + this.counter_name + ".")
-            this.generalResults[req.getId()] = {
-                state: "success",
-                result: req
-            }
-        })
-        this.generalConnections[this.counter_name] = call;
     }
 }
